@@ -1,0 +1,43 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install uv==0.12.18
+      - run: uv sync --frozen
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen ruff format --check .
+      - run: uv run --frozen pytest
+      - run: uv run --frozen python scripts/smoke.py --provider mock
+      - run: |
+          mkdir -p dist
+          uv run --frozen skillbook demo > dist/demo.json
+          uv run --frozen skillbook evaluate > dist/policy-evaluation.json
+          uv run --frozen skillbook inventory > dist/environment.cdx.json
+          uv run --frozen cyclonedx-py environment .venv/bin/python --output-file dist/sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-python-${{ matrix.python }}
+          path: dist/
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t skillbook:ci .
+      - run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=32m skillbook:ci skillbook demo
+      - run: |
+          export SKILLBOOK_API_KEY="$(openssl rand -hex 32)"
+          docker compose config --quiet

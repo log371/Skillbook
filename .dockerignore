@@ -1,0 +1,13 @@
+.git
+.venv
+.env
+state
+private
+*.key
+*.pem
+*.sqlite*
+dist
+__pycache__
+.pytest_cache
+.ruff_cache
+.coverage

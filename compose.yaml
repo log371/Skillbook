@@ -1,0 +1,54 @@
+services:
+  ingress:
+    image: nginxinc/nginx-unprivileged:1.28-alpine@sha256:7377697a821c131a924a7105fafbe7414db4e9fcc77a6f08f776f33f141ec3f8
+    ports: ["127.0.0.1:8000:8080"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 64m
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    volumes: ["./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro"]
+    networks: [entry, isolated]
+    depends_on: [api]
+  api:
+    build: .
+    environment:
+      SKILLBOOK_API_KEY: ${SKILLBOOK_API_KEY:?Export a random API token of at least 32 characters}
+      SKILLBOOK_PROVIDER: ollama
+      SKILLBOOK_MODEL: ${SKILLBOOK_MODEL:-qwen2.5:0.5b}
+      SKILLBOOK_OLLAMA_URL: http://ollama:11434
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    volumes: ["audit:/state"]
+    networks: [isolated]
+    depends_on: [ollama]
+  ollama:
+    image: ollama/ollama:0.12.6@sha256:a61a8fd395dbb931cc8cb1b5da7a2510746575c87113fdc45b647ee59ef7f808
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 3g
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /home/ollama:rw,nosuid,size=16m,uid=10001,gid=10001
+    volumes:
+      - ./state/models:/models:ro
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_MODELS: /models
+      HOME: /home/ollama
+    networks: [isolated]
+networks:
+  entry:
+  isolated:
+    internal: true
+volumes:
+  audit:
